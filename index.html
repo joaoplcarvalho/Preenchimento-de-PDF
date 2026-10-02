@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Gerador de Contratos — Feitosa Solar</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-inner">
+      <div class="marca">
+        <strong>FEITOSA SOLAR</strong>
+        <span>Gerador de Contratos</span>
+      </div>
+      <span class="topo-info">Os dados ficam só neste navegador — nada é enviado para a internet.</span>
+    </div>
+  </header>
+
+  <main>
+    <form id="form" novalidate>
+      <section class="card">
+        <h2><span class="num">1</span> Contrato</h2>
+        <div class="grid g3">
+          <label>Nº do contrato
+            <input name="numero" required placeholder="ex.: 002/2026">
+          </label>
+          <label>Data do contrato
+            <input type="date" name="data" required>
+          </label>
+          <label>Local de assinatura
+            <input name="local" required>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2><span class="num">2</span> Contratante</h2>
+        <div class="grid g3">
+          <label>Tipo
+            <select name="tipoPessoa">
+              <option value="PF">Pessoa física (CPF)</option>
+              <option value="PJ">Pessoa jurídica (CNPJ)</option>
+            </select>
+          </label>
+          <label class="span2"><span id="rotuloNome">Nome completo</span>
+            <input name="nome" required autocomplete="off">
+          </label>
+          <label><span id="rotuloDoc">CPF</span>
+            <input name="documento" required inputmode="numeric" placeholder="000.000.000-00" autocomplete="off">
+          </label>
+          <label class="span2">Endereço <small>(opcional)</small>
+            <input name="endereco" placeholder="ex.: Rua, nº, bairro, cidade – UF, CEP" autocomplete="off">
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2><span class="num">3</span> Sistema fotovoltaico</h2>
+        <div class="grid g2">
+          <label>Potência do sistema (kWp)
+            <input name="potencia" required placeholder="ex.: 39,68" inputmode="decimal">
+          </label>
+          <label>Geração estimada (kWh/mês)
+            <input name="geracao" required placeholder="ex.: 5.000" inputmode="decimal">
+          </label>
+        </div>
+        <h3>Equipamentos</h3>
+        <div class="linhas" id="equipamentos"></div>
+        <button type="button" class="add" data-add="equipamentos">+ Adicionar equipamento</button>
+        <p class="dica" id="dicaPotencia" hidden></p>
+      </section>
+
+      <section class="card">
+        <h2><span class="num">4</span> Unidades consumidoras</h2>
+        <div class="grid g2">
+          <label>Modalidade de conexão
+            <select name="modalidade">
+              <option>Autoconsumo Remoto</option>
+              <option>Autoconsumo Local</option>
+              <option>Geração Compartilhada</option>
+              <option>Múltiplas Unidades Consumidoras</option>
+            </select>
+          </label>
+        </div>
+        <div class="linhas" id="unidades"></div>
+        <button type="button" class="add" data-add="unidades">+ Adicionar unidade</button>
+      </section>
+
+      <section class="card">
+        <h2><span class="num">5</span> Pagamento</h2>
+        <label>Condição de pagamento <small>(completa a frase “O valor total … é de R$ X, …”)</small>
+          <input name="condicao" required value="a ser pago integralmente após a assinatura do presente contrato">
+        </label>
+        <div class="linhas" id="pagamentos"></div>
+        <button type="button" class="add" data-add="pagamentos">+ Adicionar forma de pagamento</button>
+        <div class="total">
+          <span>Total dos serviços</span>
+          <strong id="total">R$ 0,00</strong>
+          <em id="totalExtenso"></em>
+        </div>
+      </section>
+
+      <div id="erros" class="erros" role="alert" hidden></div>
+
+      <div class="acoes">
+        <button type="button" id="btnLimpar" class="terc">Limpar formulário</button>
+        <button type="button" id="btnPreview" class="sec">Pré-visualizar</button>
+        <button type="submit" class="pri">Gerar contrato PDF</button>
+      </div>
+    </form>
+
+    <section id="previewBox" class="card preview" hidden>
+      <div class="preview-head">
+        <h2>Pré-visualização</h2>
+        <button type="button" id="btnFecharPreview" class="terc">Fechar</button>
+      </div>
+      <iframe id="preview" title="Pré-visualização do contrato"></iframe>
+    </section>
+  </main>
+
+  <script src="lib/pdfmake.min.js"></script>
+  <script src="lib/vfs_fonts.js"></script>
+  <script src="extenso.js"></script>
+  <script src="contrato.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

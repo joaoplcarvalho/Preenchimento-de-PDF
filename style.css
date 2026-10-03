@@ -1,4 +1,6 @@
 :root {
+  --cabecalho: #0E1E3A; /* azul bem escuro: dá contraste para o azul e o amarelo da logo */
+  --amarelo: #F5C40C;   /* amarelo da logo */
   --marinho: #1B3A6B;
   --azul: #1565C0;
   --azul-claro: #E3F0FB;
@@ -22,7 +24,8 @@ body {
 }
 
 .topo {
-  background: linear-gradient(90deg, var(--marinho) 0 55%, var(--azul));
+  background: var(--cabecalho);
+  border-bottom: 4px solid var(--amarelo);
   color: white;
 }
 .topo-inner {
@@ -35,8 +38,9 @@ body {
   gap: 16px;
   flex-wrap: wrap;
 }
-.marca strong { display: block; font-size: 20px; letter-spacing: .5px; }
-.marca span { font-size: 13px; opacity: .85; }
+.marca { display: flex; align-items: center; gap: 14px; }
+.marca img { display: block; height: 56px; width: auto; }
+.marca span { font-size: 13px; opacity: .85; padding-left: 14px; border-left: 1px solid rgba(255, 255, 255, .25); }
 .topo-info { font-size: 12px; opacity: .85; }
 
 main { max-width: 980px; margin: 0 auto; padding: 20px 16px 60px; }

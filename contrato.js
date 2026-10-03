@@ -19,6 +19,8 @@ const EMPRESA = {
 };
 
 const COR = {
+  cabecalho: '#0E1E3A', // azul bem escuro: o azul de "FEITOSA" na logo some no marinho comum
+  amarelo: '#F5C40C',   // amarelo da logo
   marinho: '#1B3A6B',
   azul: '#1565C0',
   azulClaro: '#E3F0FB',
@@ -352,18 +354,18 @@ function montarContrato(d) {
         widths: ['*', '*'],
         body: [[
           {
-            stack: [
-              { text: EMPRESA.nome, fontSize: 15, bold: true, color: 'white' },
-              { text: EMPRESA.slogan, fontSize: 8, color: COR.borda },
+            columns: [
+              { image: LOGO_EMPRESA, width: 92 },
+              { text: EMPRESA.slogan, fontSize: 8, color: COR.borda, margin: [8, 16, 0, 0] },
             ],
-            fillColor: COR.marinho,
-            margin: [10, 8, 6, 8],
+            fillColor: COR.cabecalho,
+            margin: [8, 5, 6, 5],
           },
           {
             stack: [`CNPJ: ${EMPRESA.cnpj}`, EMPRESA.enderecoLinha1, EMPRESA.enderecoLinha2],
-            alignment: 'right', fontSize: 7.5, color: 'white',
-            fillColor: COR.azul,
-            margin: [6, 9, 10, 8],
+            alignment: 'right', fontSize: 7.5, color: COR.cabecalho,
+            fillColor: COR.amarelo,
+            margin: [6, 13, 10, 8],
           },
         ]],
       },

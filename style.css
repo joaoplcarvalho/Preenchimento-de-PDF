@@ -106,7 +106,7 @@ input:focus, select:focus, textarea:focus {
 }
 .invalido { border-color: var(--erro) !important; background: var(--erro-fundo); }
 
-/* Linhas dinâmicas (equipamentos, unidades, pagamentos) */
+/* Linhas dinâmicas (equipamentos, condições de pagamento) */
 .linhas { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
 .linha {
   display: grid;
@@ -117,10 +117,36 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid var(--borda);
   border-radius: 8px;
 }
-.linha[data-tipo="equipamentos"] { grid-template-columns: 90px 1fr 2fr 36px; }
-.linha[data-tipo="unidades"] { grid-template-columns: 150px 1fr 2fr 110px 36px; }
-.linha[data-tipo="pagamentos"] { grid-template-columns: 170px 2fr 150px 36px; align-items: start; }
-.linha[data-tipo="pagamentos"] .remover { margin-top: 23px; }
+.linha[data-tipo="equipamentos"] { grid-template-columns: 90px 1fr 36px; }
+.linha[data-tipo="condicoes"] { grid-template-columns: 1fr 170px 1.4fr 36px; }
+.espaco { margin-top: 18px; }
+
+.avancado summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--marinho);
+}
+.avancado[open] summary { margin-bottom: 4px; }
+
+/* Resumo dos cálculos */
+.resumo {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.resumo div {
+  background: var(--azul-claro);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.resumo span { font-size: 12px; color: var(--suave); }
+.resumo strong { font-size: 16px; color: var(--marinho); }
+.resumo-vazio, .resumo-aviso { grid-column: 1 / -1; font-size: 13px; color: var(--suave); margin: 0; }
+.resumo-aviso { color: #9A6700; }
 
 .remover {
   width: 36px; height: 38px;
@@ -209,7 +235,8 @@ button:disabled { opacity: .6; cursor: wait; }
   .g2, .g3 { grid-template-columns: 1fr; }
   .span2 { grid-column: auto; }
   .linha[data-tipo] { grid-template-columns: 1fr; }
-  .linha .remover, .linha[data-tipo="pagamentos"] .remover { width: 100%; margin-top: 0; }
+  .linha .remover { width: 100%; }
+  .resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .acoes button { flex: 1 1 auto; padding: 12px 14px; }
   .acoes .terc { flex-basis: 100%; order: 3; }
 }

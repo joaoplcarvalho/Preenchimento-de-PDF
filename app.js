@@ -1,42 +1,46 @@
-// Lógica do formulário: linhas dinâmicas, máscaras, validação e geração do PDF.
+// Lógica do formulário: linhas dinâmicas, cálculos ao vivo, validação e geração do PDF.
 
 const form = document.getElementById('form');
-const CHAVE_ULTIMO_NUMERO = 'feitosa.ultimoContrato';
+
+const INCLUSOS_PADRAO = [
+  'Vistoria técnica para elaboração do projeto.',
+  'Projeto do sistema fotovoltaico.',
+  'Anotação de Responsabilidade Técnica - ART',
+  'Homologação junto a concessionária elétrica.',
+  'Instalação do sistema conforme o projeto (distância limite de 5 metros para ponto de conexão).',
+  'Gestão, supervisão e fiscalização da instalação.',
+  'Frete de todos equipamentos referentes ao sistema.',
+  'Monitoramento técnico por 03 meses.',
+];
+
+const NAO_INCLUSOS_PADRAO = [
+  'Alterações na rede de distribuição elétrica.',
+  'Limpeza dos módulos fotovoltaicos, especialmente em períodos de seca. Este serviço garante a eficiência projetada.',
+  'Qualquer outro item não descrito acima.',
+];
 
 // ---------- definição das linhas dinâmicas ----------
 
 const LINHAS = {
   equipamentos: {
     campos: [
-      { nome: 'qtd', rotulo: 'Qtd', ph: '64' },
-      { nome: 'item', rotulo: 'Item', ph: 'Módulo Fotovoltaico', obrigatorio: true },
-      { nome: 'espec', rotulo: 'Especificação', ph: 'Painel Bifacial LEAPTON — 620 Wp', obrigatorio: true },
+      { nome: 'qtd', rotulo: 'Qtd', ph: '182', obrigatorio: true },
+      { nome: 'descricao', rotulo: 'Descrição', ph: 'Painéis OSDA 610 Wp', obrigatorio: true },
     ],
     nova: {},
     padrao: () => [
-      { item: 'Módulo Fotovoltaico' },
-      { qtd: '01', item: 'Inversor', ph: { espec: 'SUNGROW GW30K — 30 kW | Trifásico | 3 MPPT' } },
-      { qtd: '—', item: 'Materiais Elétricos', espec: 'Cabos, conectores, proteções e demais componentes' },
+      { ph: { qtd: '2', descricao: 'Inversor FOX 37,5 kW' } },
+      {},
     ],
   },
-  unidades: {
+  condicoes: {
     campos: [
-      { nome: 'tipo', rotulo: 'Tipo', opcoes: ['Geradora', 'Beneficiária'] },
-      { nome: 'cidade', rotulo: 'Cidade', ph: 'Miguel Calmon – BA', obrigatorio: true },
-      { nome: 'endereco', rotulo: 'Endereço', ph: 'Rua Alagoinhas, Nº 110 — CEP: 44720-000', obrigatorio: true },
-      { nome: 'rateio', rotulo: 'Rateio', ph: 'A definir' },
-    ],
-    nova: { tipo: 'Beneficiária', rateio: 'A definir' },
-    padrao: () => [{ tipo: 'Geradora', rateio: '—' }],
-  },
-  pagamentos: {
-    campos: [
-      { nome: 'forma', rotulo: 'Forma', ph: 'Transferência / PIX', obrigatorio: true },
-      { nome: 'dados', rotulo: 'Dados bancários / descrição', area: true },
-      { nome: 'valor', rotulo: 'Valor (R$)', ph: '69.000,00', dinheiro: true, obrigatorio: true },
+      { nome: 'titulo', rotulo: 'Condição', ph: 'À vista', obrigatorio: true },
+      { nome: 'valor', rotulo: 'Valor (R$)', ph: '265.000,00', dinheiro: true, obrigatorio: true },
+      { nome: 'detalhe', rotulo: 'Detalhe (opcional)', ph: 'Entrada + 60 parcelas' },
     ],
     nova: {},
-    padrao: () => [{ forma: 'Transferência / PIX', dados: EMPRESA.dadosBancarios }],
+    padrao: () => [{ titulo: 'À vista' }],
   },
 };
 
@@ -49,26 +53,15 @@ function criarLinha(tipo, valores = {}) {
   for (const c of def.campos) {
     const label = document.createElement('label');
     label.textContent = c.rotulo;
-    let campo;
-    if (c.opcoes) {
-      campo = document.createElement('select');
-      for (const o of c.opcoes) campo.add(new Option(o, o));
-    } else if (c.area) {
-      campo = document.createElement('textarea');
-    } else {
-      campo = document.createElement('input');
-      campo.autocomplete = 'off';
-    }
+    const campo = document.createElement('input');
+    campo.autocomplete = 'off';
     campo.dataset.campo = c.nome;
     const ph = (valores.ph && valores.ph[c.nome]) || c.ph;
     if (ph) campo.placeholder = 'ex.: ' + ph;
     if (c.obrigatorio) campo.dataset.obrigatorio = c.rotulo;
     if (c.dinheiro) {
       campo.inputMode = 'decimal';
-      campo.addEventListener('blur', () => {
-        const v = parseValor(campo.value);
-        if (!isNaN(v)) campo.value = formatarNumero(v);
-      });
+      campo.dataset.dinheiro = '';
     }
     if (valores[c.nome] != null) campo.value = valores[c.nome];
     label.appendChild(campo);
@@ -83,7 +76,8 @@ function criarLinha(tipo, valores = {}) {
   remover.textContent = '×';
   remover.addEventListener('click', () => {
     linha.remove();
-    atualizarTotais();
+    atualizarDicaPotencia();
+    atualizarResumo();
   });
   linha.appendChild(remover);
 
@@ -102,137 +96,54 @@ function lerLinhas(tipo) {
 document.querySelectorAll('[data-add]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const tipo = btn.dataset.add;
-    const linha = criarLinha(tipo, LINHAS[tipo].nova);
-    linha.querySelector('input, textarea')?.focus();
+    criarLinha(tipo, LINHAS[tipo].nova).querySelector('input').focus();
   });
 });
 
-// ---------- números e dinheiro ----------
+// ---------- números ----------
 
-// Aceita "69.000,00", "69000", "69000.5", "R$ 69.000"
-function parseValor(s) {
-  s = String(s || '').replace(/[^\d.,]/g, '');
+// Aceita "15.000", "111,02", "265.000,00", "R$ 149", "0.5"
+function parseNumero(s) {
+  s = String(s || '').replace(/[^\d.,-]/g, '');
   if (!s) return NaN;
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
   else if (/\.\d{3}(\.|$)/.test(s)) s = s.replace(/\./g, '');
-  const v = Number(s);
-  return isNaN(v) ? NaN : Math.round(v * 100) / 100;
+  return Number(s);
 }
 
-function formatarNumero(v) {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+// formata campos de dinheiro ao sair deles
+form.addEventListener('focusout', (e) => {
+  if (!e.target.matches('[data-dinheiro]')) return;
+  const v = parseNumero(e.target.value);
+  if (!isNaN(v)) e.target.value = formatarNumero(v, 2);
+});
 
-function atualizarTotais() {
-  const total = lerLinhas('pagamentos')
-    .map((p) => parseValor(p.valor))
-    .filter((v) => !isNaN(v))
-    .reduce((a, v) => a + v, 0);
-  document.getElementById('total').textContent = formatarMoeda(total);
-  document.getElementById('totalExtenso').textContent = total > 0 ? `(${reaisPorExtenso(total)})` : '';
-  return total;
-}
+// ---------- sugestão de potência a partir dos painéis ----------
 
-// Sugere a potência a partir de "64 × ... 620 Wp"
 function atualizarDicaPotencia() {
   const dica = document.getElementById('dicaPotencia');
-  const modulo = lerLinhas('equipamentos').find((e) => /m[óo]dulo|painel|placa/i.test(e.item + ' ' + e.espec));
-  const qtd = modulo && parseInt(modulo.qtd, 10);
-  const wp = modulo && (modulo.espec.match(/(\d+(?:[.,]\d+)?)\s*W[pP]\b/) || [])[1];
+  const painel = lerLinhas('equipamentos').find((e) => /\bW[pP]\b/.test(e.descricao));
+  const qtd = painel && parseInt(painel.qtd, 10);
+  const wp = painel && (painel.descricao.match(/(\d+(?:[.,]\d+)?)\s*W[pP]\b/) || [])[1];
   if (!qtd || !wp) { dica.hidden = true; return; }
 
-  const kwp = (qtd * Number(wp.replace(',', '.'))) / 1000;
-  const texto = kwp.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+  const kwp = Math.round(qtd * Number(wp.replace(',', '.'))) / 1000;
+  const texto = formatarNumero(kwp, 2);
   const campo = form.elements.potencia;
-  if (campo.value === texto) { dica.hidden = true; return; }
+  if (parseNumero(campo.value) === kwp) { dica.hidden = true; return; }
 
-  dica.innerHTML = '';
-  dica.append(`${qtd} módulos × ${wp} Wp = ${texto} kWp. `);
+  dica.textContent = `${qtd} painéis × ${wp} Wp = ${texto} kWp. `;
   const usar = document.createElement('button');
   usar.type = 'button';
-  usar.textContent = 'Usar este valor';
-  usar.addEventListener('click', () => { campo.value = texto; dica.hidden = true; });
+  usar.textContent = 'Usar como potência instalada';
+  usar.addEventListener('click', () => {
+    campo.value = texto;
+    campo.classList.remove('invalido');
+    dica.hidden = true;
+    atualizarResumo();
+  });
   dica.appendChild(usar);
   dica.hidden = false;
-}
-
-form.addEventListener('input', (e) => {
-  e.target.classList.remove('invalido');
-  if (e.target.closest('#pagamentos')) atualizarTotais();
-  if (e.target.closest('#equipamentos') || e.target.name === 'potencia') atualizarDicaPotencia();
-});
-
-// ---------- CPF / CNPJ ----------
-
-function mascaraDocumento(v, pj) {
-  const d = v.replace(/\D/g, '').slice(0, pj ? 14 : 11);
-  if (pj) {
-    return d.replace(/^(\d{2})(\d)/, '$1.$2')
-      .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-      .replace(/\.(\d{3})(\d)/, '.$1/$2')
-      .replace(/(\d{4})(\d)/, '$1-$2');
-  }
-  return d.replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-}
-
-function cpfValido(c) {
-  c = c.replace(/\D/g, '');
-  if (c.length !== 11 || /^(\d)\1+$/.test(c)) return false;
-  for (let t = 9; t < 11; t++) {
-    let soma = 0;
-    for (let i = 0; i < t; i++) soma += Number(c[i]) * (t + 1 - i);
-    if (((soma * 10) % 11) % 10 !== Number(c[t])) return false;
-  }
-  return true;
-}
-
-function cnpjValido(c) {
-  c = c.replace(/\D/g, '');
-  if (c.length !== 14 || /^(\d)\1+$/.test(c)) return false;
-  const digito = (n) => {
-    const pesos = n === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-    let soma = 0;
-    for (let i = 0; i < n; i++) soma += Number(c[i]) * pesos[i];
-    const r = soma % 11;
-    return r < 2 ? 0 : 11 - r;
-  };
-  return digito(12) === Number(c[12]) && digito(13) === Number(c[13]);
-}
-
-const campoDoc = form.elements.documento;
-const campoTipo = form.elements.tipoPessoa;
-
-function atualizarTipoPessoa() {
-  const pj = campoTipo.value === 'PJ';
-  document.getElementById('rotuloDoc').textContent = pj ? 'CNPJ' : 'CPF';
-  document.getElementById('rotuloNome').textContent = pj ? 'Razão social' : 'Nome completo';
-  campoDoc.placeholder = pj ? '00.000.000/0000-00' : '000.000.000-00';
-  campoDoc.value = mascaraDocumento(campoDoc.value, pj);
-}
-
-campoTipo.addEventListener('change', atualizarTipoPessoa);
-campoDoc.addEventListener('input', () => {
-  campoDoc.value = mascaraDocumento(campoDoc.value, campoTipo.value === 'PJ');
-});
-
-// ---------- número do contrato ----------
-
-function lerUltimoNumero() {
-  try { return localStorage.getItem(CHAVE_ULTIMO_NUMERO); } catch { return null; }
-}
-
-function salvarUltimoNumero(numero) {
-  try { localStorage.setItem(CHAVE_ULTIMO_NUMERO, numero); } catch { /* sem armazenamento: ignora */ }
-}
-
-function sugerirNumero() {
-  const ano = new Date().getFullYear();
-  const m = /^(\d+)\/(\d{4})$/.exec(lerUltimoNumero() || '');
-  if (!m) return '';
-  const proximo = Number(m[2]) === ano ? Number(m[1]) + 1 : 1;
-  return `${String(proximo).padStart(3, '0')}/${ano}`;
 }
 
 // ---------- coleta e validação ----------
@@ -242,78 +153,114 @@ function hojeISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function coletarDados() {
+const linhasDeTexto = (t) => t.split('\n').map((l) => l.trim().replace(/^[-•]\s*/, '')).filter(Boolean);
+
+function coletarDados({ marcarErros = true } = {}) {
   const f = form.elements;
   const erros = [];
-  document.querySelectorAll('.invalido').forEach((el) => el.classList.remove('invalido'));
-  const marcar = (el, msg) => { el.classList.add('invalido'); if (!erros.includes(msg)) erros.push(msg); };
-
-  const pj = f.tipoPessoa.value === 'PJ';
-  const obrigatorios = {
-    numero: 'Informe o número do contrato.',
-    data: 'Informe a data do contrato.',
-    local: 'Informe o local de assinatura.',
-    nome: pj ? 'Informe a razão social do contratante.' : 'Informe o nome do contratante.',
-    potencia: 'Informe a potência do sistema (kWp).',
-    geracao: 'Informe a geração estimada (kWh/mês).',
-    condicao: 'Informe a condição de pagamento.',
+  if (marcarErros) document.querySelectorAll('.invalido').forEach((el) => el.classList.remove('invalido'));
+  const marcar = (el, msg) => {
+    if (marcarErros) el.classList.add('invalido');
+    if (!erros.includes(msg)) erros.push(msg);
   };
-  for (const [nome, msg] of Object.entries(obrigatorios)) {
-    if (!f[nome].value.trim()) marcar(f[nome], msg);
+
+  if (!f.cliente.value.trim()) marcar(f.cliente, 'Informe o nome do cliente.');
+  if (!f.data.value) marcar(f.data, 'Informe a data da proposta.');
+
+  const numero = (nome, msg, { opcional = false, minimo = 0, permiteZero = false } = {}) => {
+    const campo = f[nome];
+    if (opcional && !campo.value.trim()) return 0;
+    const v = parseNumero(campo.value);
+    if (isNaN(v) || v < minimo || (!permiteZero && v === 0)) marcar(campo, msg);
+    return v;
+  };
+
+  const dados = {
+    cliente: f.cliente.value.trim().replace(/\s+/g, ' '),
+    data: f.data.value,
+    estrutura: f.estrutura.value.trim(),
+    observacao: f.observacao.value.trim(),
+    potencia: numero('potencia', 'Informe a potência instalada (kWp).'),
+    potenciaAmpliacao: numero('potenciaAmpliacao', 'Potência de ampliação inválida.', { opcional: true }),
+    consumoMes: numero('consumoMes', 'Informe o consumo médio (kWh/mês).'),
+    contaSem: numero('contaSem', 'Informe o valor da conta atual.'),
+    contaCom: numero('contaCom', 'Informe o valor da conta com energia solar.', { permiteZero: true }),
+    fatorGeracao: numero('fatorGeracao', 'Parâmetro “Geração por kWp” inválido.'),
+    inflacao: numero('inflacao', 'Parâmetro “Inflação anual” inválido.', { permiteZero: true }),
+    degradacao: numero('degradacao', 'Parâmetro “Perda de eficiência” inválido.', { permiteZero: true }),
+    prazoAprovacao: numero('prazoAprovacao', 'Prazo de aprovação inválido.'),
+    prazoVistoria: numero('prazoVistoria', 'Prazo de vistoria inválido.'),
+    inclusos: linhasDeTexto(f.inclusos.value),
+    naoInclusos: linhasDeTexto(f.naoInclusos.value),
+    equipamentos: lerLinhas('equipamentos'),
+    condicoes: lerLinhas('condicoes').map((c) => ({ ...c, valor: parseNumero(c.valor) })),
+  };
+
+  if (dados.contaCom >= dados.contaSem && dados.contaSem > 0) {
+    marcar(f.contaCom, 'A conta com energia solar deve ser menor que a conta atual.');
   }
 
-  if (!(pj ? cnpjValido : cpfValido)(f.documento.value)) {
-    marcar(f.documento, pj ? 'CNPJ inválido.' : 'CPF inválido.');
-  }
-
-  // campos obrigatórios das linhas
   for (const tipo of Object.keys(LINHAS)) {
     document.querySelectorAll(`#${tipo} [data-obrigatorio]`).forEach((c) => {
-      if (!c.value.trim()) marcar(c, `Preencha todos os campos obrigatórios (${c.dataset.obrigatorio}) das tabelas.`);
+      if (!c.value.trim()) marcar(c, `Preencha o campo “${c.dataset.obrigatorio}” em todas as linhas.`);
     });
   }
-
-  const equipamentos = lerLinhas('equipamentos');
-  const unidades = lerLinhas('unidades');
-  const pagamentos = lerLinhas('pagamentos').map((p) => ({ ...p, valor: parseValor(p.valor) }));
-
-  if (!equipamentos.length) erros.push('Adicione pelo menos um equipamento.');
-  if (!unidades.some((u) => u.tipo === 'Geradora')) erros.push('Adicione a unidade consumidora geradora.');
-  if (!pagamentos.length) erros.push('Adicione pelo menos uma forma de pagamento.');
-
-  document.querySelectorAll('#pagamentos [data-campo="valor"]').forEach((c) => {
-    if (c.value.trim() && !(parseValor(c.value) > 0)) marcar(c, 'Valor de pagamento inválido.');
+  document.querySelectorAll('#condicoes [data-campo="valor"]').forEach((c) => {
+    if (c.value.trim() && !(parseNumero(c.value) > 0)) marcar(c, 'Valor de pagamento inválido.');
   });
+  if (!dados.equipamentos.length) erros.push('Adicione pelo menos um equipamento.');
+  if (!dados.condicoes.length) erros.push('Adicione pelo menos uma condição de pagamento.');
 
-  // Geradora sempre primeiro na tabela
-  unidades.sort((a, b) => (a.tipo === 'Geradora' ? 0 : 1) - (b.tipo === 'Geradora' ? 0 : 1));
-
-  return {
-    erros,
-    dados: {
-      numero: f.numero.value.trim(),
-      data: f.data.value,
-      local: f.local.value.trim(),
-      tipoPessoa: f.tipoPessoa.value,
-      nome: f.nome.value.trim().replace(/\s+/g, ' '),
-      documento: f.documento.value.trim(),
-      endereco: f.endereco.value.trim(),
-      potencia: f.potencia.value.trim(),
-      geracao: f.geracao.value.trim(),
-      equipamentos,
-      modalidade: f.modalidade.value,
-      unidades,
-      condicao: f.condicao.value.trim(),
-      pagamentos,
-      total: pagamentos.reduce((a, p) => a + (p.valor || 0), 0),
-    },
-  };
+  return { erros, dados };
 }
+
+// ---------- resumo ao vivo ----------
+
+function atualizarResumo() {
+  const box = document.getElementById('resumo');
+  const { erros, dados } = coletarDados({ marcarErros: false });
+  const pronto = dados.potencia > 0 && dados.fatorGeracao > 0 && dados.contaSem > 0 &&
+    !isNaN(dados.contaCom) && dados.condicoes[0]?.valor > 0;
+  if (!pronto) {
+    box.innerHTML = '<span class="resumo-vazio">Preencha potência, conta de energia e valor para ver geração, economia, payback e ROI.</span>';
+    return;
+  }
+  const c = calcular(dados);
+  const itens = [
+    ['Geração estimada', `${formatarNumero(c.geracaoMes)} kWh/mês`],
+    ['Economia', `${formatarMoeda(c.economiaMes)}/mês (${c.economiaPct}%)`],
+    ['Payback', textoPrazo(c.paybackMeses)],
+    ['ROI em 30 anos', `${formatarNumero(c.roi, 1)} vezes`],
+  ];
+  box.innerHTML = '';
+  for (const [rotulo, valor] of itens) {
+    const div = document.createElement('div');
+    const s = document.createElement('span'); s.textContent = rotulo;
+    const b = document.createElement('strong'); b.textContent = valor;
+    div.append(s, b);
+    box.appendChild(div);
+  }
+  if (dados.consumoMes > 0 && c.geracaoMes < dados.consumoMes * 0.9) {
+    const aviso = document.createElement('p');
+    aviso.className = 'resumo-aviso';
+    aviso.textContent = `Atenção: a geração estimada cobre ${Math.round((c.geracaoMes / dados.consumoMes) * 100)}% do consumo.`;
+    box.appendChild(aviso);
+  }
+  return erros;
+}
+
+form.addEventListener('input', (e) => {
+  e.target.classList.remove('invalido');
+  if (e.target.closest('#equipamentos') || e.target.name === 'potencia') atualizarDicaPotencia();
+  atualizarResumo();
+});
+
+// ---------- ações ----------
 
 function mostrarErros(erros) {
   const box = document.getElementById('erros');
   if (!erros.length) { box.hidden = true; return false; }
-  box.innerHTML = '<strong>Corrija os itens abaixo antes de gerar o contrato:</strong>';
+  box.innerHTML = '<strong>Corrija os itens abaixo antes de gerar a proposta:</strong>';
   const ul = document.createElement('ul');
   for (const e of erros) {
     const li = document.createElement('li');
@@ -322,23 +269,23 @@ function mostrarErros(erros) {
   }
   box.appendChild(ul);
   box.hidden = false;
-  (document.querySelector('.invalido') || box).scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const primeiro = document.querySelector('.invalido');
+  if (primeiro && primeiro.closest('details')) primeiro.closest('details').open = true;
+  (primeiro || box).scrollIntoView({ behavior: 'smooth', block: 'center' });
   return true;
 }
 
 function nomeArquivo(d) {
-  const nome = d.nome.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '_').replace(/^_|_$/g, '');
-  return `Contrato_${d.numero.replace(/[^\w]+/g, '-')}_${nome}.pdf`;
+  const nome = d.cliente.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '_').replace(/^_|_$/g, '');
+  return `Proposta_Feitosa_Solar_${nome}.pdf`;
 }
-
-// ---------- ações ----------
 
 let urlPreview = null;
 
 document.getElementById('btnPreview').addEventListener('click', () => {
   const { erros, dados } = coletarDados();
   if (mostrarErros(erros)) return;
-  pdfMake.createPdf(montarContrato(dados)).getBlob((blob) => {
+  pdfMake.createPdf(montarProposta(dados)).getBlob((blob) => {
     if (urlPreview) URL.revokeObjectURL(urlPreview);
     urlPreview = URL.createObjectURL(blob);
     const box = document.getElementById('previewBox');
@@ -358,14 +305,11 @@ form.addEventListener('submit', (e) => {
   if (mostrarErros(erros)) return;
   const btn = form.querySelector('button[type="submit"]');
   btn.disabled = true;
-  pdfMake.createPdf(montarContrato(dados)).download(nomeArquivo(dados), () => {
-    btn.disabled = false;
-    salvarUltimoNumero(dados.numero);
-  });
+  pdfMake.createPdf(montarProposta(dados)).download(nomeArquivo(dados), () => { btn.disabled = false; });
 });
 
 document.getElementById('btnLimpar').addEventListener('click', () => {
-  if (confirm('Limpar todos os campos para um novo contrato?')) iniciar();
+  if (confirm('Limpar todos os campos para uma nova proposta?')) iniciar();
 });
 
 function iniciar() {
@@ -375,13 +319,12 @@ function iniciar() {
     LINHAS[tipo].padrao().forEach((v) => criarLinha(tipo, v));
   }
   form.elements.data.value = hojeISO();
-  form.elements.local.value = EMPRESA.localPadrao;
-  form.elements.numero.value = sugerirNumero();
+  form.elements.inclusos.value = INCLUSOS_PADRAO.join('\n');
+  form.elements.naoInclusos.value = NAO_INCLUSOS_PADRAO.join('\n');
   document.getElementById('erros').hidden = true;
   document.getElementById('previewBox').hidden = true;
-  atualizarTipoPessoa();
-  atualizarTotais();
   atualizarDicaPotencia();
+  atualizarResumo();
 }
 
 iniciar();
